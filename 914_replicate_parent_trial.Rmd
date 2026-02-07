@@ -1,7 +1,3 @@
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
 #Baseline characteristics (log-transform -> ANOVA)
 ```{r}
 library(tidyverse)
@@ -65,7 +61,7 @@ labels <- c(
 )
 
 # ---- 3. Generate Raw Table Values (Mean/SD) ----
-# We use tableone to calculate the raw numbers, but we turn OFF its p-values
+# tableone to calculate the raw numbers, turn off p-values
 t1 <- CreateTableOne(
   vars = vars,
   strata = ".treat",
@@ -73,7 +69,7 @@ t1 <- CreateTableOne(
   factorVars = factorVars,
   includeNA = FALSE,
   addOverall = TRUE,
-  test = FALSE # We will inject our own P-values
+  test = FALSE # added later from separate calcs below
 )
 
 # Extract the data frame
@@ -81,7 +77,7 @@ t1_df <- print(t1, quote = FALSE, noSpaces = TRUE, printToggle = FALSE) %>%
   as.data.frame() %>%
   rownames_to_column(var = "rowname")
 
-# ---- 4. Calculate Custom P-Values (CORRECTED) ----
+# ---- 4. Calculate P-Values ----
 
 # A. Continuous Variables: Log-transformed ANOVA
 p_values_cont <- map_dfr(contVars, function(v) {
@@ -97,14 +93,14 @@ p_values_cont <- map_dfr(contVars, function(v) {
   fit <- aov(log_val ~ grp, data = clean_df)
   p_val <- tidy(fit) %>% filter(term == "grp") %>% pull(p.value)
   
-  # Return row with P-value converted to CHARACTER to match tableone output
+  # Return row with P-value converted to char to match tableone output
   tibble(rowname = v, p = as.character(p_val))
 })
 
 # B. Categorical Variables: Standard Tests (Fisher/Chi-sq)
 t1_cat <- CreateTableOne(vars = factorVars, strata = ".treat", data = data2, factorVars = factorVars, test = TRUE)
 
-# Extract and ensure p column is character
+# Extract and ensure p column is char
 p_values_cat <- print(t1_cat, printToggle = FALSE, quote = FALSE) %>%
   as.data.frame() %>%
   rownames_to_column("rowname") %>%
@@ -112,7 +108,7 @@ p_values_cat <- print(t1_cat, printToggle = FALSE, quote = FALSE) %>%
   filter(p != "") %>%
   mutate(p = as.character(p)) 
 
-# C. Combine P-values
+# C. Combine p-values
 p_values_all <- bind_rows(p_values_cont, p_values_cat) %>%
   mutate(p_formatted = case_when(
     is.na(p) ~ "",
@@ -125,14 +121,12 @@ p_values_all <- bind_rows(p_values_cont, p_values_cat) %>%
 # ---- 5. Merge and Format ----
 
 final_df <- t1_df %>%
-  # Join our custom p-values. 
-  # Note: This join works perfectly for Continuous vars. 
-  # For Categorical vars, tableone puts the p-value on the main row.
+  # Join custom p-values. 
   left_join(p_values_all %>% select(rowname, p_formatted), by = "rowname") %>%
   mutate(
     # Use the labels mapping
     Characteristic = recode(rowname, !!!labels),
-    # Fill in labels that didn't match (categorical levels usually)
+    # Fill in labels that didn't match (categorical levels)
     Characteristic = ifelse(is.na(Characteristic), rowname, Characteristic),
     # If the join found a p-value, use it. Otherwise leave blank.
     p = replace_na(p_formatted, "")
@@ -183,7 +177,7 @@ ancova_vars <- list(
   "Anxiety (HAM-A 14)" = c(pre = "BL_Total_HAM_A_14_Score", post = "WK4_Total_HAM_A_14_Score")
 )
 
-# ---- 3. Run ANCOVA Loop (Dynamic Formula Method) ----
+# ---- 3. Run ANCOVA Loop w/ dynamic formula----
 results_list <- list()
 
 for (label in names(ancova_vars)) {
@@ -210,7 +204,7 @@ for (label in names(ancova_vars)) {
     filter(str_detect(term, "Treatment_Factor")) %>% 
     pull(p.value)
   
-  # 5. Calculate Adjusted Means (Least Squares Means)
+  # 5. Calculate Adjusted Means (Least Squares)
   emm <- emmeans(model, ~ Treatment_Factor)
   emm_df <- as.data.frame(emm)
   
@@ -288,7 +282,7 @@ variable_sequences <- list(
                         "WK24_Total_HAM_A_14_Score")
 )
 
-# ---- 3. Helper Function: Robust LMM with Fallback ----
+# ---- 3. LME Helper Function ----
 run_lmm_analysis <- function(data, col_names, outcome_label) {
   
   # A. Pivot Long
@@ -308,16 +302,14 @@ run_lmm_analysis <- function(data, col_names, outcome_label) {
     drop_na(Value, Time)
   
   # B. Run Model with Fallback Logic
-  # We use tryCatch to handle errors/warnings gracefully.
   
   result <- tryCatch({
-    # ATTEMPT 1: Random Slope (Original Method) + Better Optimizer
-    # 'bobyqa' is more robust for these convergence issues
+    # ATTEMPT 1: Random Slope (Original Method) + Better Optimize (bobyqa)
     model <- lmer(Value ~ Time * Treatment_Factor + (1 + Time | Subject), 
                   data = long_df,
                   control = lmerControl(optimizer = "bobyqa"))
     
-    # Check for Singularity (a common hidden failure)
+    # Check for Singularity 
     if (isSingular(model)) warning("Singular fit")
     
     list(model = model, type = "Random Slope (Original)")
