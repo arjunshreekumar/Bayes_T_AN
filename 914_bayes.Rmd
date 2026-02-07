@@ -9,16 +9,12 @@ joined_data <- read.csv(paste0(data_PATH, "914_complete_data.csv"))
 
 #Basline characteristics 
 ```{r}
-# Word-ready baseline characteristics table WITH variable names
 library(tidyverse)
 library(tableone)
 library(flextable)
 library(officer)
 
-# ---- read data ----
 data <- read_csv(paste0(data_PATH, "914_complete_data_wide.csv"))
-
-# ---- SET treatment variable name (edit if needed) ----
 treat_var <- "Treatment"   # e.g., "arm", "group", "tx"
 
 # ---- recode variables ----
@@ -97,7 +93,7 @@ table1 <- CreateTableOne(
   addOverall = TRUE
 )
 
-# ---- extract table AND keep variable names ----
+# ---- extract table and keep variable names ----
 table1_df <- print(
   table1,
   quote = FALSE,
@@ -184,11 +180,6 @@ run_bayesian_model <- function(data, rois, sessions_keep, file_out) {
     model_dat <- data %>%
       select(all_of(roi), Treatment, Meal, Session, BL_EDE_Q_c, Subject) %>%
       filter(complete.cases(.))
-
-    if (nrow(model_dat) == 0) {
-      warning("Skipping ROI '", roi, "' (3-factor) because no complete cases after NA filtering.")
-      next
-    }
 
     # Fit model 
     model <- brm(
@@ -302,7 +293,7 @@ run_bayes_meal_averaged <- function(data_wide, rois, sessions_keep, file_out) {
               paste(missing_cols, collapse = ", "))
     }
 
-    # Long format for this ROI across requested sessions & meals
+    # Long format for ROI across appropriate sessions & meals
     dat_long <- dat %>%
       select(Subject, Treatment, BL_EDE_Q_c, all_of(available_cols)) %>%
       pivot_longer(
@@ -692,7 +683,6 @@ emm_2factor <- function(fit, model_label, roi_label) {
 # Run to refit all models, in case returning to project with fresh environment
 # ============================================================================
 if (refit_models) {
-  # This refits ALL ROIs for EACH model type
 
   # 3-factor models (long format)
   fit3_bl_4wk      <- run_bayesian_model(data, rois, c("ses-001", "ses-002"), file.path(results_PATH, "bayes_BL_4wk.csv"))
@@ -867,7 +857,6 @@ loo_df <- bind_rows(loo_out) %>%
   select(ModelType, Session, ROI, elpd_loo, looic, p_loo, n_pareto_k_gt_0.7, max_pareto_k) %>%
   arrange(ModelType, Session, ROI)
 
-# Save
 out_path <- file.path(results_PATH, "bayes_reporting_LOO_momentmatch.csv")
 write.csv(loo_df, out_path, row.names = FALSE)
 
@@ -877,7 +866,7 @@ message("Saved LOO (moment_match=TRUE) to: ", out_path)
 #Selective reloo for max_pareto_k>0.7 (4 models)
 ```{r}
 # ============================================================
-# SELECTIVE RELOO FOR THE 4 FLAGGED MODELS ONLY
+# Selective reloo for four models with pareto_k>0.7
 # - Uses known ModelType / Session / ROI combinations
 # - Runs loo(..., moment_match = TRUE, reloo = TRUE)
 # - Saves: bayes_reporting_LOO_reloo_selected.csv
@@ -910,9 +899,6 @@ print(flagged_models)
 fits_dir <- file.path(results_PATH, "brmsfits")
 rds_files <- list.files(fits_dir, pattern = "\\.rds$", full.names = TRUE)
 
-if (length(rds_files) == 0) {
-  stop("No .rds files found in: ", fits_dir)
-}
 
 fits_index <- tibble(file = rds_files) %>%
   mutate(
@@ -998,15 +984,11 @@ message("Selective reloo results saved to: ", out_path)
 
 ```
 
-#Final reloo for last two models 
+#Final reloo for last two models with failed fits from above
 ```{r}
 library(future)
 future::plan(future::sequential)
 options(future.globals.maxSize = Inf)
-
-# ============================================================
-# RE-RUN ONLY THE FAILED RELOO FITS (2factor ones) SEQUENTIALLY
-# ============================================================
 
 suppressPackageStartupMessages({
   library(brms)
