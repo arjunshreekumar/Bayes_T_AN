@@ -5,5 +5,4 @@ are also included.
 
 2) 914_data_cleaning.Rmd includes all data cleaning  performed on preprocessed neuroimaging data, as well as behavioral and serologic data.
 
-3) 914_replicate_parent_trial.Rmd includes the analyses detailed in the supplement that replicate the results of this substudy's parent trial, A Randomized Placebo-Controlled Trial
-of Low-Dose Testosterone Therapy in Women With Anorexia Nervosa by Allison Kimball et al. 
+3) 914_replicate_parent_trial.Rmd includes the analyses detailed in the supplement that replicate the (behavioral and serological, non-neuroimaging) results of this substudy's parent trial, A Randomized Placebo-Controlled Trial of Low-Dose Testosterone Therapy in Women With Anorexia Nervosa by Allison Kimball et al. 
