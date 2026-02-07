@@ -1,0 +1,105 @@
+#Last edited 11/08/2025 by AS
+
+#Paths
+```{r}
+PATH <- "/Volumes/LMHRSCH$/Arjun Shreekumar/914/"
+data_PATH <- paste0(PATH, 'data/')
+results_PATH <- paste0(PATH, 'results/')
+figures_PATH <- paste0(PATH, 'figures/')
+```
+
+#Join main study spreadsheet with anatomical betas 
+```{r}
+library(dplyr)
+library(stringr)
+
+main_study <- read.csv(paste0(data_PATH, "914_behav_serol_data.csv"), check.names = FALSE)
+betas <- read.csv(paste0(data_PATH, "914_anat_betas.csv"))
+
+# Join behavioral and serologic data with anatomical betas 
+joined_data <- merge(main_study, betas, by = "Subject")
+
+# Clean column names
+colnames(joined_data) <- colnames(joined_data) %>%
+  str_trim() %>%                       # Remove leading/trailing spaces
+  str_replace_all(" ", "_") %>%        # Replace spaces with underscores
+  str_replace_all("-", "_")            # Replace dashes with underscores
+
+
+# Remove duplicate treatment column, rename remaining treatment column 
+joined_data <- joined_data %>% 
+  select(-Treatment.y) %>% 
+    rename(Treatment = Treatment.x)
+
+# Remove Esoterix lab results (keeping Mayo lab results and renaming)
+joined_data <- joined_data %>% 
+  select(-contains("esoterix")) %>%
+    rename_with(~ gsub("_Mayo", "", .x), contains("_Mayo"))
+
+write.csv(joined_data, file.path(data_PATH, "914_complete_data.csv"), row.names = FALSE)
+```
+
+#Pivot fmri betas to create a wide spreadhseet
+```{r}
+library(dplyr)
+library(stringr)
+library(tidyr)
+
+main_study <- read.csv(paste0(data_PATH, "914_behav_serol_data.csv"), check.names = FALSE)
+betas <- read.csv(paste0(data_PATH, "914_anat_betas.csv"))
+
+# Clean session/meal naming
+betas <- betas %>%
+  mutate(
+    Session = str_replace_all(Session, "-", "_"),
+    Meal = str_replace_all(Meal, "-", "_")
+  )
+
+# Pivot betas wide 
+roi_cols <- c("Hypothalamus", "Nacc", "Caudate", "Putamen", "Amygdala",
+              "Hippocampus", "Insula", "ACC", "OFC", "DLPFC", "VMPFC")
+
+betas_wide <- betas %>%
+  pivot_wider(
+    id_cols = Subject,
+    names_from = c(Session, Meal),
+    values_from = all_of(roi_cols),
+    names_glue = "{Session}_{Meal}_{.value}"
+  )
+
+# Relabel sessions to behavioral timepoints 
+# Mapping between fMRI sessions and behavioral timepoints
+session_map <- c(
+  "ses_001" = "BL",
+  "ses_002" = "WK4",
+  "ses_003" = "WK24"
+)
+
+# Function to rename columns accordingly
+rename_sessions <- function(colnames_vec) {
+  new_names <- colnames_vec
+  for (s in names(session_map)) {
+    new_names <- str_replace_all(new_names, s, session_map[[s]])
+  }
+  return(new_names)
+}
+
+colnames(betas_wide) <- rename_sessions(colnames(betas_wide))
+
+# Merge with behavioral data 
+joined_data <- main_study %>%
+  left_join(betas_wide, by = "Subject")
+
+# Clean column names 
+colnames(joined_data) <- colnames(joined_data) %>%
+  str_trim() %>%
+  str_replace_all(" ", "_") %>%
+  str_replace_all("-", "_")
+
+# Remove duplicate/unwanted columns 
+joined_data <- joined_data %>%
+  select(-contains("esoterix")) %>%
+  rename_with(~ gsub("_Mayo", "", .x), contains("_Mayo"))
+
+write.csv(joined_data, file.path(data_PATH, "914_complete_data_wide.csv"), row.names = FALSE)
+```
