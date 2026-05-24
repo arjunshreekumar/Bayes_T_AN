@@ -227,7 +227,7 @@ run_bayesian_model <- function(data, rois, sessions_keep, file_out) {
 # ------------------------------------------------------------
 # 2-Factor meal-averaged helper (Treatment * Session)
 #   - meal averaging: mean(pre, post) if both present
-#     if post missing uses pre (mean over available)
+#     if post missing uses pre as sole value
 # ------------------------------------------------------------
 run_bayes_meal_averaged <- function(data_wide, rois, sessions_keep, file_out) {
 
@@ -680,7 +680,7 @@ emm_2factor <- function(fit, model_label, roi_label) {
 }
 
 # ===========================================================================
-# Run to refit all models, in case returning to project with fresh environment
+# Run to refit all models if returning to project with fresh environment
 # ============================================================================
 if (refit_models) {
 
