@@ -9,7 +9,7 @@ library(broom)
 # ---- 1. Read and Clean Data ----
 data <- read_csv(paste0(data_PATH, "914_complete_data_wide.csv"))
 
-treat_var <- "Treatment"   # Ensure this matches your column name
+treat_var <- "Treatment"   
 
 data2 <- data %>%
   mutate(
