@@ -15,9 +15,8 @@ library(flextable)
 library(officer)
 
 data <- read_csv(paste0(data_PATH, "914_complete_data_wide.csv"))
-treat_var <- "Treatment"   # e.g., "arm", "group", "tx"
+treat_var <- "Treatment"   
 
-# ---- recode variables ----
 data2 <- data %>%
   mutate(
     .treat = as.factor(.data[[treat_var]]),
@@ -93,7 +92,7 @@ table1 <- CreateTableOne(
   addOverall = TRUE
 )
 
-# ---- extract table and keep variable names ----
+# ---- extract table AND keep variable names ----
 table1_df <- print(
   table1,
   quote = FALSE,
@@ -117,7 +116,6 @@ ft <- flextable(table1_df) %>%
     autonum = officer::run_autonum(seq_id = "tab", bkm = "table1")
   )
 
-# ---- export to Word ----
 doc <- read_docx() %>%
   body_add_flextable(ft)
 
@@ -227,7 +225,7 @@ run_bayesian_model <- function(data, rois, sessions_keep, file_out) {
 # ------------------------------------------------------------
 # 2-Factor meal-averaged helper (Treatment * Session)
 #   - meal averaging: mean(pre, post) if both present
-#     if post missing uses pre as sole value
+#     if post missing uses pre (mean over available)
 # ------------------------------------------------------------
 run_bayes_meal_averaged <- function(data_wide, rois, sessions_keep, file_out) {
 
@@ -282,16 +280,6 @@ run_bayes_meal_averaged <- function(data_wide, rois, sessions_keep, file_out) {
 
     available_cols <- intersect(expected_cols, names(dat))
     missing_cols   <- setdiff(expected_cols, names(dat))
-
-    if (length(available_cols) == 0) {
-      warning("Skipping ROI '", roi, "' (2-factor) because no expected columns were found: ",
-              paste(expected_cols, collapse = ", "))
-      next
-    }
-    if (length(missing_cols) > 0) {
-      warning("ROI '", roi, "' (2-factor): missing expected columns: ",
-              paste(missing_cols, collapse = ", "))
-    }
 
     # Long format for ROI across appropriate sessions & meals
     dat_long <- dat %>%
@@ -498,7 +486,6 @@ suppressPackageStartupMessages({
 
 refit_models <- FALSE  # set TRUE if fresh environment and no previous brms objects
 
-# Where to save reporting outputs
 dir.create(results_PATH, showWarnings = FALSE, recursive = TRUE)
 
 # -----------------------
@@ -679,9 +666,9 @@ emm_2factor <- function(fit, model_label, roi_label) {
   bind_rows(out_em, out_c1, out_c2)
 }
 
-# ===========================================================================
-# Run to refit all models if returning to project with fresh environment
-# ============================================================================
+# =============================================================================
+# Run to refit all models, in case returning to project with fresh environment
+# =============================================================================
 if (refit_models) {
 
   # 3-factor models (long format)
@@ -704,12 +691,6 @@ fits_dir <- file.path(results_PATH, "brmsfits")
 dir.create(fits_dir, showWarnings = FALSE, recursive = TRUE)
 rds_files <- list.files(fits_dir, pattern = "\\.rds$", full.names = TRUE)
 
-if (length(rds_files) == 0) {
-  message("No .rds brmsfit files found in: ", fits_dir)
-  message("To enable the reporting stats below, save each brms model during fitting via saveRDS(model, file=...).")
-  message("See the small patch at the END of this chunk to add saveRDS into your existing loops.")
-}
-
 # Parse filenames into ModelType/Session/ROI (expects underscores)
 # e.g., "3factor_BL-24wk_ACC.rds"
 fits_index <- tibble(file = rds_files) %>%
@@ -728,6 +709,31 @@ fits_loaded <- setNames(
   paste(fits_index$ModelLabel, fits_index$ROI, sep = "|")
 )
 
+# -----------------------
+# Helper: Convergence (R-hat) and ESS
+# -----------------------
+diagnostic_stats <- function(fit, model_label, roi_label) {
+  
+  # Extract summary which contains Rhat, Bulk_ESS, and Tail_ESS
+  fit_summ <- summary(fit)
+  
+  # Get max R-hat across all model parameters (fixed and random)
+  all_rhats <- brms::rhat(fit)
+  max_rhat <- max(all_rhats, na.rm = TRUE)
+  
+  # Get minimum ESS for the fixed effects
+  min_bulk_ess <- min(fit_summ$fixed$Bulk_ESS, na.rm = TRUE)
+  min_tail_ess <- min(fit_summ$fixed$Tail_ESS, na.rm = TRUE)
+  
+  tibble(
+    Model = model_label,
+    ROI = roi_label,
+    Max_Rhat = max_rhat,
+    Min_Bulk_ESS = min_bulk_ess,
+    Min_Tail_ESS = min_tail_ess
+  )
+}
+
 # ============================================================
 # Compute all reporting outputs
 # ============================================================
@@ -737,6 +743,7 @@ all_re_stats   <- list()
 all_r2_stats   <- list()
 all_loo_stats  <- list()
 all_emm        <- list()
+all_diag_stats <- list() # <--- NEW: Initialize the empty list here
 
 for (i in seq_len(nrow(fits_index))) {
   key <- paste(fits_index$ModelLabel[i], fits_index$ROI[i], sep = "|")
@@ -764,7 +771,10 @@ for (i in seq_len(nrow(fits_index))) {
 
   all_re_stats[[key]]  <- re_stats(fit, model_label, roi_label)
   all_r2_stats[[key]]  <- r2_stats(fit, model_label, roi_label)
-  all_loo_stats[[key]] <- loo_stats(fit, model_label, roi_label)
+  #all_loo_stats[[key]] <- loo_stats(fit, model_label, roi_label)
+  
+  # <--- NEW: Run the diagnostic function and save it to the list
+  all_diag_stats[[key]] <- diagnostic_stats(fit, model_label, roi_label) 
 }
 
 coef_stats_df <- bind_rows(all_coef_stats)
@@ -772,12 +782,15 @@ re_stats_df   <- bind_rows(all_re_stats)
 r2_stats_df   <- bind_rows(all_r2_stats)
 loo_stats_df  <- bind_rows(all_loo_stats)
 emm_df        <- bind_rows(all_emm)
+diag_stats_df <- bind_rows(all_diag_stats) # <--- NEW: Bind the list into a dataframe
 
 # Save outputs
 write.csv(coef_stats_df, file.path(results_PATH, "bayes_reporting_coef_pd_bf.csv"), row.names = FALSE)
 write.csv(re_stats_df,   file.path(results_PATH, "bayes_reporting_random_effects_icc.csv"), row.names = FALSE)
 write.csv(r2_stats_df,   file.path(results_PATH, "bayes_reporting_bayesR2.csv"), row.names = FALSE)
 write.csv(loo_stats_df,  file.path(results_PATH, "bayes_reporting_LOO.csv"), row.names = FALSE)
+write.csv(diag_stats_df, file.path(results_PATH, "bayes_reporting_diagnostics.csv"), row.names = FALSE) # <--- NEW: Save the CSV
+
 if (nrow(emm_df) > 0) {
   write.csv(emm_df, file.path(results_PATH, "bayes_reporting_EMMs_and_contrasts.csv"), row.names = FALSE)
 }
@@ -857,6 +870,7 @@ loo_df <- bind_rows(loo_out) %>%
   select(ModelType, Session, ROI, elpd_loo, looic, p_loo, n_pareto_k_gt_0.7, max_pareto_k) %>%
   arrange(ModelType, Session, ROI)
 
+# Save
 out_path <- file.path(results_PATH, "bayes_reporting_LOO_momentmatch.csv")
 write.csv(loo_df, out_path, row.names = FALSE)
 
@@ -865,13 +879,6 @@ message("Saved LOO (moment_match=TRUE) to: ", out_path)
 
 #Selective reloo for max_pareto_k>0.7 (4 models)
 ```{r}
-# ============================================================
-# Selective reloo for four models with pareto_k>0.7
-# - Uses known ModelType / Session / ROI combinations
-# - Runs loo(..., moment_match = TRUE, reloo = TRUE)
-# - Saves: bayes_reporting_LOO_reloo_selected.csv
-# ============================================================
-
 suppressPackageStartupMessages({
   library(brms)
   library(loo)
@@ -898,7 +905,6 @@ print(flagged_models)
 # ---- Load saved brmsfit objects ----
 fits_dir <- file.path(results_PATH, "brmsfits")
 rds_files <- list.files(fits_dir, pattern = "\\.rds$", full.names = TRUE)
-
 
 fits_index <- tibble(file = rds_files) %>%
   mutate(
@@ -984,7 +990,7 @@ message("Selective reloo results saved to: ", out_path)
 
 ```
 
-#Final reloo for last two models with failed fits from above
+#Final reloo for last two models 
 ```{r}
 library(future)
 future::plan(future::sequential)
@@ -1073,6 +1079,7 @@ write.csv(reloo_fix_df, out_path_fix, row.names = FALSE)
 message("Saved reloo fixes to: ", out_path_fix)
 
 ```
+
 #Merge reloo csvs
 ```{r}
 # ============================================================
