@@ -743,7 +743,7 @@ all_re_stats   <- list()
 all_r2_stats   <- list()
 all_loo_stats  <- list()
 all_emm        <- list()
-all_diag_stats <- list() # <--- NEW: Initialize the empty list here
+all_diag_stats <- list() 
 
 for (i in seq_len(nrow(fits_index))) {
   key <- paste(fits_index$ModelLabel[i], fits_index$ROI[i], sep = "|")
@@ -773,7 +773,7 @@ for (i in seq_len(nrow(fits_index))) {
   all_r2_stats[[key]]  <- r2_stats(fit, model_label, roi_label)
   #all_loo_stats[[key]] <- loo_stats(fit, model_label, roi_label)
   
-  # <--- NEW: Run the diagnostic function and save it to the list
+  # Run the diagnostic function and save it to the list
   all_diag_stats[[key]] <- diagnostic_stats(fit, model_label, roi_label) 
 }
 
@@ -782,14 +782,14 @@ re_stats_df   <- bind_rows(all_re_stats)
 r2_stats_df   <- bind_rows(all_r2_stats)
 loo_stats_df  <- bind_rows(all_loo_stats)
 emm_df        <- bind_rows(all_emm)
-diag_stats_df <- bind_rows(all_diag_stats) # <--- NEW: Bind the list into a dataframe
+diag_stats_df <- bind_rows(all_diag_stats) 
 
 # Save outputs
 write.csv(coef_stats_df, file.path(results_PATH, "bayes_reporting_coef_pd_bf.csv"), row.names = FALSE)
 write.csv(re_stats_df,   file.path(results_PATH, "bayes_reporting_random_effects_icc.csv"), row.names = FALSE)
 write.csv(r2_stats_df,   file.path(results_PATH, "bayes_reporting_bayesR2.csv"), row.names = FALSE)
 write.csv(loo_stats_df,  file.path(results_PATH, "bayes_reporting_LOO.csv"), row.names = FALSE)
-write.csv(diag_stats_df, file.path(results_PATH, "bayes_reporting_diagnostics.csv"), row.names = FALSE) # <--- NEW: Save the CSV
+write.csv(diag_stats_df, file.path(results_PATH, "bayes_reporting_diagnostics.csv"), row.names = FALSE) 
 
 if (nrow(emm_df) > 0) {
   write.csv(emm_df, file.path(results_PATH, "bayes_reporting_EMMs_and_contrasts.csv"), row.names = FALSE)
