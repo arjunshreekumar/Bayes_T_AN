@@ -92,7 +92,7 @@ table1 <- CreateTableOne(
   addOverall = TRUE
 )
 
-# ---- extract table AND keep variable names ----
+# ---- extract table keeping variable names ----
 table1_df <- print(
   table1,
   quote = FALSE,
@@ -162,7 +162,7 @@ run_bayesian_model <- function(data, rois, sessions_keep, file_out) {
       BL_EDE_Q_c = as.numeric(scale(BL_EDE_Q_Subscore_Global_Score, center = TRUE, scale = TRUE))
     )
 
-  # Where to save brmsfit objects
+  # Save brmsfit objects
   fits_dir <- file.path(dirname(file_out), "brmsfits")
   dir.create(fits_dir, showWarnings = FALSE, recursive = TRUE)
   session_tag <- paste(sessions_keep, collapse = "-")
@@ -262,7 +262,7 @@ run_bayes_meal_averaged <- function(data_wide, rois, sessions_keep, file_out) {
       BL_EDE_Q_c = as.numeric(scale(BL_EDE_Q_Subscore_Global_Score, center = TRUE, scale = TRUE))
     )
 
-  # Where to save brmsfit objects
+  # Save brmsfit objects
   fits_dir <- file.path(dirname(file_out), "brmsfits")
   dir.create(fits_dir, showWarnings = FALSE, recursive = TRUE)
   session_tag <- paste(sessions_keep, collapse = "-")
